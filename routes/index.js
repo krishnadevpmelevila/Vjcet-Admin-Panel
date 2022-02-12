@@ -43,20 +43,89 @@ validate = [
   check('sub', 'Subject length should be 3 to 25 characters')
     .isLength({ min: 2, max: 250 }),
   check('name', 'Name length should be 3 to 25 characters')
-    .isLength({ min: 3, max: 250}),
+    .isLength({ min: 3, max: 250 }),
   check('link', 'Link length should be 3 to 250 characters')
     .isLength({ min: 3, max: 250 }),
   check('type', 'Select resource type')
     .isLength({ min: 3, max: 250 }),
 
 ]
+// Uncomment and register for api creds.
+
+// router.post("/register", async (req, res) => {
+//   try {
+//     // Get user input
+//     const { first_name, last_name, email, password } = req.body;
+//     console.log(req.body.first_name);
+//     console.log(email);
+//     // // Validate user input
+//     // if (!(email && password && first_name && last_name)) {
+//     //   res.status(400).send("All input is required");
+//     // }
+
+//     // check if user already exist
+//     // Validate if user exist in our database
+
+//     const oldUser = await Api.findOne({ email });
+
+//     if (oldUser) {
+//       return res.status(409).send("User Already Exist. Please Login");
+//     }
+
+//     //Encrypt user password
+//     encryptedPassword = await bcrypt.hash(password, 10);
+
+//     // Create user in our database
+//     const api = await Api.create({
+//       first_name,
+//       last_name,
+//       email: email.toLowerCase(), // sanitize: convert email to lowercase
+//       password: encryptedPassword,
+//     });
+
+//     // Create token
+//     const token = jwt.sign(
+//       { api_user_id: api._id, email },
+//       process.env.TOKEN_KEY,
+//       {
+//         expiresIn: "2h",
+//       }
+//     );
+//     // save user token
+//     api.token = token;
+
+//     // return new user
+//     res.status(201).json(api);
+//   } catch (err) {
+//     console.log(err);
+//   }
+//   // Our register logic ends here
+// });
 
 
 /* GET home page. */
 router.get('/', (req, res) => {
-  res.render('index', { title: 'Membership Form', Key: process.env.PAY_KEY_ID });
+  let user_token = req.cookies['x-access-token'];
+
+  if (user_token) {
+    axios.get(process.env.API_URL + '/data', {
+      headers: {
+        'x-access-token': user_token
+      }
+    })
+      .then(response => {
+        res.render('index', { title: 'Membership Form', Key: process.env.PAY_KEY_ID });
+        // res.send(response.data);
+      })
+      .catch(error => {
+        console.log(error);
+      });
+  } else {
+    res.redirect('/login')
+  }
+
 });
-router.get('/data', (req, res) => {
+router.get('/data', auth, (req, res) => {
   // get data from activation
   User.find({}, (err, data) => {
     if (err) throw err;
@@ -67,6 +136,71 @@ router.get('/data', (req, res) => {
 
 
 
+
+// Login
+router.post("/admin", async (req, res) => {
+  // Our login logic starts here
+  try {
+    // Get user input
+    const { email, password } = req.body;
+
+    // Validate user input
+    if (!(email && password)) {
+      res.status(400).send("All input is required");
+    }
+    // Validate if user exist in our database
+    const api = await Api.findOne({ email });
+
+    if (api && (await bcrypt.compare(password, api.password))) {
+      // Create token
+      const token = jwt.sign(
+        { api_id: api._id, email },
+        process.env.TOKEN_KEY,
+        {
+          expiresIn: "2h",
+        }
+      );
+
+      // save user token
+      api.token = token;
+      cookietoken = api.token
+      let user_token = req.cookies['x-access-token']; // always empty
+
+      if (user_token) {
+
+        res.redirect('/');
+      } else {
+
+
+
+        res.cookie('x-access-token', cookietoken, { maxAge: 60000 * 60 * 1.5 });
+        res.redirect('/');
+      }
+      // res.location('/dashboard')
+
+      // res.status(302).end()
+
+    }
+    else {
+      res.status(400).send("Invalid Credentials");
+    }
+
+  } catch (err) {
+    console.log(err);
+  }
+});
+
+router.get("/login", async (req, res) => {
+  let user_token = req.cookies['x-access-token'];
+
+  if (user_token) {
+    res.redirect('/');
+  } else {
+    res.status(200).render('login');
+  }
+
+
+});
 router.post('/free-reg', validate, async (req, res) => {
   const errors = validationResult(req);
 
